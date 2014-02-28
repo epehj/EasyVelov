@@ -14,6 +14,7 @@ import android.location.LocationManager;
 import android.os.Bundle;
 
 import com.epehj.lyon.velov.pojo.Station;
+import com.epehj.lyon.velov.pojo.StationCompleteList;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.GoogleMap.OnMarkerClickListener;
@@ -25,12 +26,16 @@ import com.google.gson.Gson;
 import com.google.gson.stream.JsonReader;
 import com.octo.android.robospice.JacksonSpringAndroidSpiceService;
 import com.octo.android.robospice.SpiceManager;
+import com.octo.android.robospice.persistence.exception.SpiceException;
+import com.octo.android.robospice.request.listener.RequestListener;
 
 public class MapsActivity extends Activity implements LocationListener, OnMarkerClickListener {
 	private LocationManager locationManager;
 	private GoogleMap map;
 	private final String contract = "Lyon"; // à changer après
 	final Map<Marker, Station> stations = new HashMap<Marker, Station>();
+
+	protected SpiceManager spiceManager = new SpiceManager(JacksonSpringAndroidSpiceService.class);
 
 	@Override
 	protected void onCreate(final Bundle SavedInstance) {
@@ -106,23 +111,47 @@ public class MapsActivity extends Activity implements LocationListener, OnMarker
 	public boolean onMarkerClick(final Marker marker) {
 		// recuperer les infos de la stations
 		final Station station = stations.get(marker);
-		marker.setSnippet(station.getData());
+
+		final StationRequest request = new StationRequest(station.getContract(),
+				station.getNumber());
+
+		final String lastRequestCache = station.createCacheKey();
+		// spiceManager.execute(station, lastRequestCache, DurationInMillis.ONE_MINUTE,
+		// new StationRTIRequestListener());
+		spiceManager.execute(request, new StationRTIRequestListener());
+
+		marker.setSnippet(station.getName());
 		return false;
 	}
 
 	// robospice
-	protected SpiceManager spiceManager = new SpiceManager(JacksonSpringAndroidSpiceService.class);
 
 	@Override
 	protected void onStart() {
-		super.onStart();
 		spiceManager.start(this);
+		super.onStart();
 	}
 
 	@Override
 	protected void onStop() {
 		spiceManager.shouldStop();
 		super.onStop();
+	}
+
+	// inner RequestListenerClass
+	private class StationRTIRequestListener implements RequestListener<StationCompleteList> {
+
+		@Override
+		public void onRequestFailure(final SpiceException e) {
+			System.out.println("request failure");
+			// update your UI
+		}
+
+		@Override
+		public void onRequestSuccess(final StationCompleteList rtis) {
+			// update your UI
+			System.out.println("request success");
+		}
 	}
 
 }

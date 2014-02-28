@@ -2,13 +2,69 @@ package com.epehj.lyon.velov.pojo;
 
 import org.codehaus.jackson.annotate.JsonIgnoreProperties;
 
+import com.google.android.gms.maps.model.Marker;
+
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class RealTimeInfos {
+public class StationComplete {
+	private String number;
+	private String name;
+	private String lat, lng;
+	private Marker marker;
+	private String contract;
 	private String banking;
 	private String status;
 	private String available_bike_stand;
+	private String contract_name;
 	private String available_bikes;
 	private String last_update;
+
+	public String getNumber() {
+		return number;
+	}
+
+	public void setNumber(final String number) {
+		this.number = number;
+	}
+
+	public String getName() {
+		return name;
+	}
+
+	public void setName(final String name) {
+		this.name = name;
+	}
+
+	public String getLatitude() {
+		return lat;
+	}
+
+	public void setLatitude(final String latitude) {
+		this.lat = latitude;
+	}
+
+	public String getLongitude() {
+		return lng;
+	}
+
+	public void setLongitude(final String longitude) {
+		this.lng = longitude;
+	}
+
+	public Marker getMarker() {
+		return marker;
+	}
+
+	public void setMarker(final Marker marker) {
+		this.marker = marker;
+	}
+
+	public String getContract() {
+		return contract;
+	}
+
+	public void setContract(final String contract) {
+		this.contract = contract;
+	}
 
 	public String getBanking() {
 		return banking;

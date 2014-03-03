@@ -7,6 +7,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import android.app.Activity;
+import android.app.ProgressDialog;
 import android.content.Context;
 import android.location.Location;
 import android.location.LocationListener;
@@ -19,6 +20,8 @@ import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.GoogleMap.OnMarkerClickListener;
 import com.google.android.gms.maps.MapFragment;
+import com.google.android.gms.maps.model.BitmapDescriptor;
+import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
@@ -30,13 +33,15 @@ import com.octo.android.robospice.persistence.DurationInMillis;
 import com.octo.android.robospice.persistence.exception.SpiceException;
 import com.octo.android.robospice.request.listener.RequestListener;
 
+//TODO ajouter un calque avec les stations favorites qui se rafraichissent automatiquement au lancement
+//TODO faire un zoom pour voir l'ensemble des stations fav et les rafraichir
 public class MapsActivity extends Activity implements LocationListener, OnMarkerClickListener {
 	private LocationManager locationManager;
 	private GoogleMap map;
-	private Marker selectedMarker;
 
 	private final String contract = "Lyon"; // TODO : a rendre modulaire
 	private final Map<Marker, Station> stations = new HashMap<Marker, Station>();
+	private ProgressDialog progressDial = null;
 
 	protected SpiceManager spiceManager = new SpiceManager(GsonSpringAndroidSpiceService.class);
 
@@ -79,6 +84,8 @@ public class MapsActivity extends Activity implements LocationListener, OnMarker
 		map.animateCamera(CameraUpdateFactory.newLatLngZoom(
 				new LatLng(loc.getLatitude(), loc.getLongitude()), 15));
 
+		progressDial = new ProgressDialog(this);
+
 	}
 
 	@Override
@@ -114,7 +121,6 @@ public class MapsActivity extends Activity implements LocationListener, OnMarker
 	public boolean onMarkerClick(final Marker marker) {
 		// recuperer les infos de la stations
 		final Station station = stations.get(marker);
-		selectedMarker = marker;
 
 		final StationRequest request = new StationRequest(station.getContract(),
 				station.getNumber());
@@ -124,8 +130,11 @@ public class MapsActivity extends Activity implements LocationListener, OnMarker
 
 		setProgressBarIndeterminate(false);
 		setProgressBarVisibility(true);
+		progressDial.setMessage("Refresh…");
+		progressDial.setProgressStyle(ProgressDialog.STYLE_SPINNER);
+		progressDial.show();
 
-		// cache de une minute
+		// cache toujours expiré : TODO a changer puisque les données sont valables 1 min
 		spiceManager.execute(request, null, DurationInMillis.ALWAYS_EXPIRED,
 				new StationRTIRequestListener(marker));
 
@@ -159,6 +168,7 @@ public class MapsActivity extends Activity implements LocationListener, OnMarker
 		@Override
 		public void onRequestFailure(final SpiceException e) {
 			System.out.println("request failure");
+			progressDial.dismiss();
 			// update your UI
 		}
 
@@ -166,12 +176,36 @@ public class MapsActivity extends Activity implements LocationListener, OnMarker
 		public void onRequestSuccess(final StationComplete station) {
 			// update your UI
 			System.out.println("request success");
-			final String bikes = Integer.parseInt(station.getAvailable_bikes()) > 1 ? station
-					.getAvailable_bikes() + " bikes" : station.getAvailable_bikes() + " bike";
-			final String stands = Integer.parseInt(station.getAvailable_bike_stands()) > 1 ? station
-					.getAvailable_bike_stands() + " stands"
-					: station.getAvailable_bike_stands() + " stand";
-			marker.setSnippet(bikes + "\n" + stands);
+			progressDial.dismiss();
+			final int bike = Integer.parseInt(station.getAvailable_bikes());
+			final int stand = Integer.parseInt(station.getAvailable_bike_stands());
+
+			BitmapDescriptor desc = null;
+			final StringBuffer bikes = new StringBuffer(bike + " bike");
+			final StringBuffer stands = new StringBuffer(" " + stand + " stand");
+
+			if (bike >= 1 && stand >= 1) {
+				desc = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN);
+				bikes.append('s');
+				stands.append('s');
+			} else {
+				if (bike < 1) {
+					// plus de velo
+					desc = BitmapDescriptorFactory
+							.defaultMarker(BitmapDescriptorFactory.HUE_ORANGE);
+					// desc = BitmapDescriptorFactory.fromAsset("standsnobikes.png");
+				} else if (stand < 1) {
+					// plus de stands
+					desc = BitmapDescriptorFactory
+							.defaultMarker(BitmapDescriptorFactory.HUE_YELLOW);
+					// desc = BitmapDescriptorFactory.fromAsset("bikenostands.png");
+				} else {
+					desc = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED);
+				}
+			}
+			marker.setIcon(desc);
+
+			marker.setSnippet(bikes.toString() + stands.toString());
 			marker.hideInfoWindow();
 			marker.showInfoWindow();
 		}

@@ -44,13 +44,15 @@ public class MapsActivity extends Activity implements LocationListener, OnMarker
 	private ProgressDialog progressDial = null;
 
 	protected SpiceManager spiceManager = new SpiceManager(GsonSpringAndroidSpiceService.class);
+	private Marker selectedMarker;
 
 	@Override
 	protected void onCreate(final Bundle SavedInstance) {
 		super.onCreate(SavedInstance);
 		setContentView(R.layout.activity_main);
-		map = ((MapFragment) getFragmentManager().findFragmentById(R.id.map)).getMap();
+		progressDial = new ProgressDialog(this);
 
+		map = ((MapFragment) getFragmentManager().findFragmentById(R.id.map)).getMap();
 		map.setMyLocationEnabled(true);
 
 		final InputStream is = getResources().openRawResource(R.raw.lyon);
@@ -63,8 +65,12 @@ public class MapsActivity extends Activity implements LocationListener, OnMarker
 				final Station s = (Station) gson.fromJson(jr, Station.class);
 				s.setContract(contract);
 				// plutot faire un dico, Marker => station
-				stations.put(map.addMarker(new MarkerOptions().title(s.getName()).position(
-						new LatLng(Float.parseFloat(s.getLat()), Float.parseFloat(s.getLng())))), s);
+				stations.put(
+						selectedMarker = map.addMarker(new MarkerOptions().title(s.getName())
+								.position(
+										new LatLng(Float.parseFloat(s.getLat()), Float.parseFloat(s
+												.getLng())))), s);
+				// refresh(s);
 
 				// stations.add(s);
 			}
@@ -83,8 +89,6 @@ public class MapsActivity extends Activity implements LocationListener, OnMarker
 		final Location loc = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
 		map.animateCamera(CameraUpdateFactory.newLatLngZoom(
 				new LatLng(loc.getLatitude(), loc.getLongitude()), 15));
-
-		progressDial = new ProgressDialog(this);
 
 	}
 
@@ -120,8 +124,13 @@ public class MapsActivity extends Activity implements LocationListener, OnMarker
 	@Override
 	public boolean onMarkerClick(final Marker marker) {
 		// recuperer les infos de la stations
+		selectedMarker = marker;
 		final Station station = stations.get(marker);
+		refresh(station);
+		return false;
+	}
 
+	private void refresh(final Station station) {
 		final StationRequest request = new StationRequest(station.getContract(),
 				station.getNumber());
 
@@ -136,9 +145,7 @@ public class MapsActivity extends Activity implements LocationListener, OnMarker
 
 		// cache toujours expiré : TODO a changer puisque les données sont valables 1 min
 		spiceManager.execute(request, null, DurationInMillis.ALWAYS_EXPIRED,
-				new StationRTIRequestListener(marker));
-
-		return false;
+				new StationRTIRequestListener(selectedMarker));
 	}
 
 	// robospice

@@ -14,7 +14,7 @@ import android.location.LocationManager;
 import android.os.Bundle;
 
 import com.epehj.lyon.velov.pojo.Station;
-import com.epehj.lyon.velov.pojo.StationCompleteList;
+import com.epehj.lyon.velov.pojo.StationComplete;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.GoogleMap.OnMarkerClickListener;
@@ -24,18 +24,21 @@ import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.gson.Gson;
 import com.google.gson.stream.JsonReader;
-import com.octo.android.robospice.JacksonSpringAndroidSpiceService;
+import com.octo.android.robospice.GsonSpringAndroidSpiceService;
 import com.octo.android.robospice.SpiceManager;
+import com.octo.android.robospice.persistence.DurationInMillis;
 import com.octo.android.robospice.persistence.exception.SpiceException;
 import com.octo.android.robospice.request.listener.RequestListener;
 
 public class MapsActivity extends Activity implements LocationListener, OnMarkerClickListener {
 	private LocationManager locationManager;
 	private GoogleMap map;
-	private final String contract = "Lyon"; // à changer après
-	final Map<Marker, Station> stations = new HashMap<Marker, Station>();
+	private Marker selectedMarker;
 
-	protected SpiceManager spiceManager = new SpiceManager(JacksonSpringAndroidSpiceService.class);
+	private final String contract = "Lyon"; // TODO : a rendre modulaire
+	private final Map<Marker, Station> stations = new HashMap<Marker, Station>();
+
+	protected SpiceManager spiceManager = new SpiceManager(GsonSpringAndroidSpiceService.class);
 
 	@Override
 	protected void onCreate(final Bundle SavedInstance) {
@@ -111,16 +114,21 @@ public class MapsActivity extends Activity implements LocationListener, OnMarker
 	public boolean onMarkerClick(final Marker marker) {
 		// recuperer les infos de la stations
 		final Station station = stations.get(marker);
+		selectedMarker = marker;
 
 		final StationRequest request = new StationRequest(station.getContract(),
 				station.getNumber());
 
-		final String lastRequestCache = station.createCacheKey();
 		// spiceManager.execute(station, lastRequestCache, DurationInMillis.ONE_MINUTE,
 		// new StationRTIRequestListener());
-		spiceManager.execute(request, new StationRTIRequestListener());
 
-		marker.setSnippet(station.getName());
+		setProgressBarIndeterminate(false);
+		setProgressBarVisibility(true);
+
+		// cache de une minute
+		spiceManager.execute(request, null, DurationInMillis.ALWAYS_EXPIRED,
+				new StationRTIRequestListener(marker));
+
 		return false;
 	}
 
@@ -139,7 +147,14 @@ public class MapsActivity extends Activity implements LocationListener, OnMarker
 	}
 
 	// inner RequestListenerClass
-	private class StationRTIRequestListener implements RequestListener<StationCompleteList> {
+	private class StationRTIRequestListener implements RequestListener<StationComplete> {
+
+		private final Marker marker;
+
+		public StationRTIRequestListener(final Marker marker) {
+			this.marker = marker;
+			// TODO Auto-generated constructor stub
+		}
 
 		@Override
 		public void onRequestFailure(final SpiceException e) {
@@ -148,9 +163,17 @@ public class MapsActivity extends Activity implements LocationListener, OnMarker
 		}
 
 		@Override
-		public void onRequestSuccess(final StationCompleteList rtis) {
+		public void onRequestSuccess(final StationComplete station) {
 			// update your UI
 			System.out.println("request success");
+			final String bikes = Integer.parseInt(station.getAvailable_bikes()) > 1 ? station
+					.getAvailable_bikes() + " bikes" : station.getAvailable_bikes() + " bike";
+			final String stands = Integer.parseInt(station.getAvailable_bike_stands()) > 1 ? station
+					.getAvailable_bike_stands() + " stands"
+					: station.getAvailable_bike_stands() + " stand";
+			marker.setSnippet(bikes + "\n" + stands);
+			marker.hideInfoWindow();
+			marker.showInfoWindow();
 		}
 	}
 

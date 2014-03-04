@@ -13,11 +13,13 @@ import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
 import android.os.Bundle;
+import android.widget.Toast;
 
 import com.epehj.lyon.velov.pojo.Station;
 import com.epehj.lyon.velov.pojo.StationComplete;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
+import com.google.android.gms.maps.GoogleMap.OnInfoWindowClickListener;
 import com.google.android.gms.maps.GoogleMap.OnMarkerClickListener;
 import com.google.android.gms.maps.MapFragment;
 import com.google.android.gms.maps.model.BitmapDescriptor;
@@ -35,12 +37,25 @@ import com.octo.android.robospice.request.listener.RequestListener;
 
 //TODO ajouter un calque avec les stations favorites qui se rafraichissent automatiquement au lancement
 //TODO faire un zoom pour voir l'ensemble des stations fav et les rafraichir
-public class MapsActivity extends Activity implements LocationListener, OnMarkerClickListener {
+/**
+ * 
+ * @author e_msette
+ * 
+ *         TODO modifier le json global pour ajouter les stations favorites
+ *         TODO utiliser le padding pour afficher un autre layout et ajouter un bouton pour afficher les fav
+ *         TODO creer les marqueurs des fav en parallèle mais ne pas les afficher de suite.
+ *         TODO utiliser map utility libs
+ */
+
+public class MapsActivity extends Activity implements LocationListener, OnMarkerClickListener,
+		OnInfoWindowClickListener {
 	private LocationManager locationManager;
 	private GoogleMap map;
 
 	private final String contract = "Lyon"; // TODO : a rendre modulaire
 	private final Map<Marker, Station> stations = new HashMap<Marker, Station>();
+	private final Map<Marker, Station> favs = new HashMap<Marker, Station>();
+
 	private ProgressDialog progressDial = null;
 
 	protected SpiceManager spiceManager = new SpiceManager(GsonSpringAndroidSpiceService.class);
@@ -59,6 +74,7 @@ public class MapsActivity extends Activity implements LocationListener, OnMarker
 		final JsonReader jr = new JsonReader(new InputStreamReader(is));
 		// final List<Station> stations = new ArrayList<Station>();
 		try {
+
 			jr.beginArray();
 			final Gson gson = new Gson();
 			while (jr.hasNext()) {
@@ -70,18 +86,18 @@ public class MapsActivity extends Activity implements LocationListener, OnMarker
 								.position(
 										new LatLng(Float.parseFloat(s.getLat()), Float.parseFloat(s
 												.getLng())))), s);
+				// initFavs();
+
 				// refresh(s);
 
 				// stations.add(s);
 			}
-
 			jr.endArray();
+
 		} catch (final IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-
-		map.setOnMarkerClickListener(this);
 
 		locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
 		locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER,
@@ -90,6 +106,18 @@ public class MapsActivity extends Activity implements LocationListener, OnMarker
 		map.animateCamera(CameraUpdateFactory.newLatLngZoom(
 				new LatLng(loc.getLatitude(), loc.getLongitude()), 15));
 
+		// Listeners
+		map.setOnMarkerClickListener(this);
+		map.setOnInfoWindowClickListener(this);
+		map.setPadding(0, 0, 30, 0);
+
+	}
+
+	// sur quit de l'app, sauvegarde en json des favs
+	@Override
+	protected void onDestroy() {
+		// TODO Auto-generated method stub
+		super.onDestroy();
 	}
 
 	@Override
@@ -134,9 +162,6 @@ public class MapsActivity extends Activity implements LocationListener, OnMarker
 		final StationRequest request = new StationRequest(station.getContract(),
 				station.getNumber());
 
-		// spiceManager.execute(station, lastRequestCache, DurationInMillis.ONE_MINUTE,
-		// new StationRTIRequestListener());
-
 		setProgressBarIndeterminate(false);
 		setProgressBarVisibility(true);
 		progressDial.setMessage("Refresh…");
@@ -160,6 +185,20 @@ public class MapsActivity extends Activity implements LocationListener, OnMarker
 	protected void onStop() {
 		spiceManager.shouldStop();
 		super.onStop();
+	}
+
+	// sur clic, on place en fav
+	@Override
+	public void onInfoWindowClick(final Marker arg0) {
+		if (favs.get(arg0) == null) {
+			favs.put(arg0, stations.get(arg0));
+			Toast.makeText(getApplicationContext(), "Fav added",
+					(int) DurationInMillis.ONE_SECOND * 2).show();
+		} else {
+			favs.remove(arg0);
+			Toast.makeText(getApplicationContext(), "Fav removed",
+					(int) DurationInMillis.ONE_SECOND * 2).show();
+		}
 	}
 
 	// inner RequestListenerClass

@@ -10,6 +10,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
+
 import android.app.Activity;
 import android.app.ProgressDialog;
 import android.content.Context;
@@ -24,6 +25,7 @@ import android.widget.Toast;
 
 import com.epehj.lyon.velov.pojo.Station;
 import com.epehj.lyon.velov.pojo.StationComplete;
+import com.google.android.gms.maps.CameraUpdate;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.GoogleMap.OnInfoWindowClickListener;
@@ -36,6 +38,8 @@ import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.gson.Gson;
 import com.google.gson.stream.JsonReader;
+import com.google.maps.android.clustering.Cluster;
+import com.google.maps.android.clustering.ClusterManager;
 import com.octo.android.robospice.GsonSpringAndroidSpiceService;
 import com.octo.android.robospice.SpiceManager;
 import com.octo.android.robospice.persistence.DurationInMillis;
@@ -55,9 +59,11 @@ import com.octo.android.robospice.request.listener.RequestListener;
  */
 
 public class MapsActivity extends Activity implements LocationListener, OnMarkerClickListener,
-		OnInfoWindowClickListener, OnClickListener {
+		OnInfoWindowClickListener, OnClickListener, ClusterManager.OnClusterClickListener<Station>,
+		ClusterManager.OnClusterItemClickListener<Station> {
 	private LocationManager locationManager;
 	private GoogleMap map;
+	private ClusterManager<Station> cm;
 
 	private final String contract = "Lyon"; // TODO : a rendre modulaire
 	private final Map<Marker, Station> stations = new HashMap<Marker, Station>();
@@ -81,6 +87,8 @@ public class MapsActivity extends Activity implements LocationListener, OnMarker
 		map = ((MapFragment) getFragmentManager().findFragmentById(R.id.map)).getMap();
 		map.setMyLocationEnabled(true);
 
+		cm = new ClusterManager<Station>(this, map);
+
 		final InputStream is = getResources().openRawResource(R.raw.lyon);
 		final JsonReader jr = new JsonReader(new InputStreamReader(is));
 		// final List<Station> stations = new ArrayList<Station>();
@@ -91,12 +99,11 @@ public class MapsActivity extends Activity implements LocationListener, OnMarker
 			while (jr.hasNext()) {
 				final Station s = (Station) gson.fromJson(jr, Station.class);
 				s.setContract(contract);
+				cm.addItem(s);
 				// plutot faire un dico, Marker => station
 				stations.put(
 						selectedMarker = map.addMarker(new MarkerOptions().title(s.getName())
-								.position(
-										new LatLng(Float.parseFloat(s.getLat()), Float.parseFloat(s
-												.getLng())))), s);
+								.position(s.getPosition()).visible(false)), s);
 				markers.put(s.getNumber(), selectedMarker);
 				// refresh(s);
 				// stations.add(s);
@@ -119,8 +126,13 @@ public class MapsActivity extends Activity implements LocationListener, OnMarker
 				new LatLng(loc.getLatitude(), loc.getLongitude()), 15));
 
 		// Listeners
-		map.setOnMarkerClickListener(this);
+		// map.setOnMarkerClickListener(this);
+		map.setOnMarkerClickListener(cm);
+		cm.setOnClusterClickListener(this);
+		cm.setOnClusterItemClickListener(this);
 		map.setOnInfoWindowClickListener(this);
+		map.setOnCameraChangeListener(cm);
+
 		final Button fav = (Button) findViewById(R.id.btn);
 		fav.setTag(true);
 		fav.setOnClickListener(this);
@@ -279,7 +291,7 @@ public class MapsActivity extends Activity implements LocationListener, OnMarker
 	// inner RequestListenerClass
 	private class StationRTIRequestListener implements RequestListener<StationComplete> {
 
-		private final Marker marker;
+		private Marker marker;
 
 		public StationRTIRequestListener(final Marker marker) {
 			this.marker = marker;
@@ -300,6 +312,7 @@ public class MapsActivity extends Activity implements LocationListener, OnMarker
 			// update your UI
 			System.out.println("request success");
 			progressDial.dismiss();
+			marker = markers.get(station.getNumber());
 			final int bike = Integer.parseInt(station.getAvailable_bikes());
 			final int stand = Integer.parseInt(station.getAvailable_bike_stands());
 
@@ -331,6 +344,7 @@ public class MapsActivity extends Activity implements LocationListener, OnMarker
 			marker.setSnippet(bikes.toString() + stands.toString());
 			marker.hideInfoWindow();
 			marker.showInfoWindow();
+			marker.setVisible(true);
 		}
 	}
 
@@ -350,6 +364,22 @@ public class MapsActivity extends Activity implements LocationListener, OnMarker
 			m.setVisible(!m.isVisible());
 		}
 
+	}
+
+	@Override
+	public boolean onClusterClick(final Cluster<Station> cluster) {
+		// sur clic d'un cluster faire un zoom camera
+		final CameraUpdate cameraUpdate = CameraUpdateFactory.newLatLng(cluster.getPosition());
+		map.animateCamera(cameraUpdate);
+		CameraUpdateFactory.zoomIn();
+		return false;
+	}
+
+	@Override
+	public boolean onClusterItemClick(final Station item) {
+		System.out.println("SIMPLE ITEM");
+		refresh(item);
+		return true;
 	}
 
 }

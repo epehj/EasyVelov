@@ -1,16 +1,16 @@
 package com.epehj.lyon.velov.pojo;
 
-import com.epehj.lyon.velov.tools.Globals;
-import com.google.android.gms.maps.model.Marker;
-import com.octo.android.robospice.request.springandroid.SpringAndroidSpiceRequest;
+import com.google.android.gms.maps.model.LatLng;
+import com.google.maps.android.clustering.ClusterItem;
 
-public class Station  {
+public class Station implements ClusterItem {
+
 	private String number;
 	private String name;
 	private String latitude, longitude;
-	private Marker marker;
+	private final LatLng position;
+	// private Marker marker;
 	private String contract;
-	private RealTimeInfos rti;
 
 	public Station(final String num, final String nom, final String lati, final String longi) {
 
@@ -18,6 +18,7 @@ public class Station  {
 		name = nom;
 		latitude = lati;
 		longitude = longi;
+		position = new LatLng(Double.parseDouble(lati), Double.parseDouble(longi));
 	}
 
 	public String getNumber() {
@@ -52,10 +53,6 @@ public class Station  {
 		this.name = name;
 	}
 
-	public void setMarker(final Marker m) {
-		marker = m;
-	}
-
 	public void setContract(final String contract) {
 		this.contract = contract;
 	}
@@ -69,4 +66,8 @@ public class Station  {
 		return contract;
 	}
 
+	@Override
+	public LatLng getPosition() {
+		return new LatLng(Double.parseDouble(latitude), Double.parseDouble(longitude));
+	}
 }

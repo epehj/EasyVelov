@@ -1,11 +1,15 @@
 package com.epehj.lyon.velov;
 
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
-
 import android.app.Activity;
 import android.app.ProgressDialog;
 import android.content.Context;
@@ -13,6 +17,9 @@ import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
 import android.os.Bundle;
+import android.view.View;
+import android.view.View.OnClickListener;
+import android.widget.Button;
 import android.widget.Toast;
 
 import com.epehj.lyon.velov.pojo.Station;
@@ -48,13 +55,17 @@ import com.octo.android.robospice.request.listener.RequestListener;
  */
 
 public class MapsActivity extends Activity implements LocationListener, OnMarkerClickListener,
-		OnInfoWindowClickListener {
+		OnInfoWindowClickListener, OnClickListener {
 	private LocationManager locationManager;
 	private GoogleMap map;
 
 	private final String contract = "Lyon"; // TODO : a rendre modulaire
 	private final Map<Marker, Station> stations = new HashMap<Marker, Station>();
-	private final Map<Marker, Station> favs = new HashMap<Marker, Station>();
+	// contient exactement stations, mais utilise les stations comme clés plutot que les markers.
+	// utilisé pour ajouter des stations en favoris
+	// en gros ça sert uniquement a faire une liste doublement chainée, il doit y avoir plus propre
+	private final Map<String, Marker> markers = new HashMap<String, Marker>();
+	private Map<Marker, Station> favs = null;
 
 	private ProgressDialog progressDial = null;
 
@@ -86,13 +97,14 @@ public class MapsActivity extends Activity implements LocationListener, OnMarker
 								.position(
 										new LatLng(Float.parseFloat(s.getLat()), Float.parseFloat(s
 												.getLng())))), s);
-				// initFavs();
-
+				markers.put(s.getNumber(), selectedMarker);
 				// refresh(s);
-
 				// stations.add(s);
-			}
+			}// while
 			jr.endArray();
+
+			// initFavs, on pourrait le faire dans un thread à part pour alléger l'UI
+			initFavs();
 
 		} catch (final IOException e) {
 			// TODO Auto-generated catch block
@@ -109,14 +121,67 @@ public class MapsActivity extends Activity implements LocationListener, OnMarker
 		// Listeners
 		map.setOnMarkerClickListener(this);
 		map.setOnInfoWindowClickListener(this);
+		final Button fav = (Button) findViewById(R.id.btn);
+		fav.setTag(true);
+		fav.setOnClickListener(this);
+
 		map.setPadding(0, 0, 30, 0);
 
 	}
 
+	private void initFavs() {
+		favs = new HashMap<Marker, Station>();
+		try {
+			final FileInputStream fis = openFileInput(contract.toLowerCase(Locale.FRANCE)
+					+ "_favs.json");
+			try {
+				final JsonReader jr = new JsonReader(new InputStreamReader(fis));
+				final Gson gson = new Gson();
+				jr.beginArray();
+				while (jr.hasNext()) {
+					final Station station = gson.fromJson(jr, Station.class);
+					final String idStation = station.getNumber();
+					favs.put(markers.get(idStation), station);
+				}
+				jr.endArray();
+
+			} finally {
+				fis.close();
+			}
+		} catch (final FileNotFoundException e) {
+			// create file
+			// c'est mal d'utiliser des exceptions pour faire des if/else
+			e.printStackTrace();
+		} catch (final IOException e) {
+			e.printStackTrace();
+		}
+
+	}
+
 	// sur quit de l'app, sauvegarde en json des favs
+	// unfav depuis affichage des favs uniquement = NPE
 	@Override
 	protected void onDestroy() {
-		// TODO Auto-generated method stub
+		final Gson gson = new Gson();
+		final Collection<Station> ls = favs.values();
+		final String json = gson.toJson(ls);
+		try {
+			// creation du fichier
+			final FileOutputStream fos = openFileOutput(contract.toLowerCase(Locale.FRANCE)
+					+ "_favs.json", MODE_PRIVATE);
+			try {
+				fos.write(json.getBytes());
+			} finally {
+				fos.close();
+			}
+		} catch (final FileNotFoundException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (final IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+
 		super.onDestroy();
 	}
 
@@ -151,8 +216,8 @@ public class MapsActivity extends Activity implements LocationListener, OnMarker
 
 	@Override
 	public boolean onMarkerClick(final Marker marker) {
-		// recuperer les infos de la stations
-		selectedMarker = marker;
+		// recuperer les infos de la station
+		selectedMarker = marker; // je pense que c'est bien inutile
 		final Station station = stations.get(marker);
 		refresh(station);
 		return false;
@@ -188,14 +253,24 @@ public class MapsActivity extends Activity implements LocationListener, OnMarker
 	}
 
 	// sur clic, on place en fav
+	// les stations peuvent être en double, je pense que c'est lié aux markers pendant qu'on fav
+	// on vient de clicker sur une station, alors qu'on voyait tous les markers
+	// -> il faut ajouter le marker de stations et la station, et pas un nouveau marker
+	// -> dans l'init des favs, il faut reprendre le marker correspondant à ce fav là
+	/*
+	 * Faire une double map, avec comme clé les stations et comme valeur le marqueurs associé. C'est ce marqueur que l'on utilisera pour ajouter dans
+	 * ler favs
+	 */
 	@Override
 	public void onInfoWindowClick(final Marker arg0) {
+		// dans le cas on ou ne voit que les favs, et qu'on click sur la infowindow
 		if (favs.get(arg0) == null) {
 			favs.put(arg0, stations.get(arg0));
 			Toast.makeText(getApplicationContext(), "Fav added",
 					(int) DurationInMillis.ONE_SECOND * 2).show();
 		} else {
 			favs.remove(arg0);
+			// arg0.setVisible(false);
 			Toast.makeText(getApplicationContext(), "Fav removed",
 					(int) DurationInMillis.ONE_SECOND * 2).show();
 		}
@@ -215,6 +290,8 @@ public class MapsActivity extends Activity implements LocationListener, OnMarker
 		public void onRequestFailure(final SpiceException e) {
 			System.out.println("request failure");
 			progressDial.dismiss();
+			Toast.makeText(getApplicationContext(), "Could not refresh station infos",
+					(int) DurationInMillis.ONE_SECOND * 5).show();
 			// update your UI
 		}
 
@@ -255,6 +332,24 @@ public class MapsActivity extends Activity implements LocationListener, OnMarker
 			marker.hideInfoWindow();
 			marker.showInfoWindow();
 		}
+	}
+
+	@Override
+	public void onClick(final View arg0) {
+		final Button button = (Button) findViewById(R.id.btn);
+		if ((Boolean) button.getTag()) {
+			button.setText("All");
+		} else {
+			button.setText("Fav");
+		}
+		button.setTag(!(Boolean) button.getTag());
+		for (final Marker m : stations.keySet()) {
+			m.setVisible(!m.isVisible());
+		}
+		for (final Marker m : favs.keySet()) {
+			m.setVisible(!m.isVisible());
+		}
+
 	}
 
 }

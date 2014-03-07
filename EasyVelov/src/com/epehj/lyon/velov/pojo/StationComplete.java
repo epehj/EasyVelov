@@ -2,15 +2,19 @@ package com.epehj.lyon.velov.pojo;
 
 import org.codehaus.jackson.annotate.JsonIgnoreProperties;
 
-import com.google.android.gms.maps.model.Marker;
-
+//faire une classe complete :
+/**
+ * toString() qui renvoie le nb de bike et stand, avec bonne orthographe
+ * un statut de StationComplète (enum?) qui donne tous les cas possibles (zero, ok, nobikestands, nostandsbike)
+ * 
+ * */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class StationComplete {
-	private String number;
-	private String name;
-	private String lat, lng;
-	private Marker marker;
-	private String contract;
+public class StationComplete extends Station {
+
+	public StationComplete(final String num, final String nom, final String lati, final String longi) {
+		super(num, nom, lati, longi);
+	}
+
 	private String banking;
 	private String status;
 	private String bike_stands;
@@ -25,54 +29,6 @@ public class StationComplete {
 
 	public void setBike_stands(final String bike_stands) {
 		this.bike_stands = bike_stands;
-	}
-
-	public String getNumber() {
-		return number;
-	}
-
-	public void setNumber(final String number) {
-		this.number = number;
-	}
-
-	public String getName() {
-		return name;
-	}
-
-	public void setName(final String name) {
-		this.name = name;
-	}
-
-	public String getLatitude() {
-		return lat;
-	}
-
-	public void setLatitude(final String latitude) {
-		this.lat = latitude;
-	}
-
-	public String getLongitude() {
-		return lng;
-	}
-
-	public void setLongitude(final String longitude) {
-		this.lng = longitude;
-	}
-
-	public Marker getMarker() {
-		return marker;
-	}
-
-	public void setMarker(final Marker marker) {
-		this.marker = marker;
-	}
-
-	public String getContract() {
-		return contract;
-	}
-
-	public void setContract(final String contract) {
-		this.contract = contract;
 	}
 
 	public String getBanking() {

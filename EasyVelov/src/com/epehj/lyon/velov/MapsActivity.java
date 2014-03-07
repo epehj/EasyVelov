@@ -6,8 +6,9 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.util.Collection;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
@@ -28,8 +29,6 @@ import com.epehj.lyon.velov.pojo.StationComplete;
 import com.google.android.gms.maps.CameraUpdate;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
-import com.google.android.gms.maps.GoogleMap.OnInfoWindowClickListener;
-import com.google.android.gms.maps.GoogleMap.OnMarkerClickListener;
 import com.google.android.gms.maps.MapFragment;
 import com.google.android.gms.maps.model.BitmapDescriptor;
 import com.google.android.gms.maps.model.BitmapDescriptorFactory;
@@ -40,6 +39,7 @@ import com.google.gson.Gson;
 import com.google.gson.stream.JsonReader;
 import com.google.maps.android.clustering.Cluster;
 import com.google.maps.android.clustering.ClusterManager;
+import com.google.maps.android.clustering.view.DefaultClusterRenderer;
 import com.octo.android.robospice.GsonSpringAndroidSpiceService;
 import com.octo.android.robospice.SpiceManager;
 import com.octo.android.robospice.persistence.DurationInMillis;
@@ -58,9 +58,10 @@ import com.octo.android.robospice.request.listener.RequestListener;
  *         TODO utiliser map utility libs
  */
 
-public class MapsActivity extends Activity implements LocationListener, OnMarkerClickListener,
-		OnInfoWindowClickListener, OnClickListener, ClusterManager.OnClusterClickListener<Station>,
-		ClusterManager.OnClusterItemClickListener<Station> {
+public class MapsActivity extends Activity implements LocationListener, OnClickListener,
+		ClusterManager.OnClusterClickListener<Station>,
+		ClusterManager.OnClusterItemClickListener<Station>,
+		ClusterManager.OnClusterItemInfoWindowClickListener<Station> {
 	private LocationManager locationManager;
 	private GoogleMap map;
 	private ClusterManager<Station> cm;
@@ -71,12 +72,14 @@ public class MapsActivity extends Activity implements LocationListener, OnMarker
 	// utilisé pour ajouter des stations en favoris
 	// en gros ça sert uniquement a faire une liste doublement chainée, il doit y avoir plus propre
 	private final Map<String, Marker> markers = new HashMap<String, Marker>();
-	private Map<Marker, Station> favs = null;
+	// private Map<Marker, Station> favs = null;
+	private List<Station> favs;
 
 	private ProgressDialog progressDial = null;
 
 	protected SpiceManager spiceManager = new SpiceManager(GsonSpringAndroidSpiceService.class);
 	private Marker selectedMarker;
+	private StationComplete selectedItem;
 
 	@Override
 	protected void onCreate(final Bundle SavedInstance) {
@@ -88,6 +91,9 @@ public class MapsActivity extends Activity implements LocationListener, OnMarker
 		map.setMyLocationEnabled(true);
 
 		cm = new ClusterManager<Station>(this, map);
+		cm.setRenderer(new StationRenderer());
+		// map.setInfoWindowAdapter(cm.getMarkerManager());
+		// cm.getMarkerCollection().setOnInfoWindowAdapter(new StationInfoWindowAdapter());
 
 		final InputStream is = getResources().openRawResource(R.raw.lyon);
 		final JsonReader jr = new JsonReader(new InputStreamReader(is));
@@ -101,9 +107,9 @@ public class MapsActivity extends Activity implements LocationListener, OnMarker
 				s.setContract(contract);
 				cm.addItem(s);
 				// plutot faire un dico, Marker => station
-				stations.put(
-						selectedMarker = map.addMarker(new MarkerOptions().title(s.getName())
-								.position(s.getPosition()).visible(false)), s);
+				// stations.put(
+				// selectedMarker = map.addMarker(new MarkerOptions().title(s.getName())
+				// .position(s.getPosition()).visible(false)), s);
 				markers.put(s.getNumber(), selectedMarker);
 				// refresh(s);
 				// stations.add(s);
@@ -130,7 +136,8 @@ public class MapsActivity extends Activity implements LocationListener, OnMarker
 		map.setOnMarkerClickListener(cm);
 		cm.setOnClusterClickListener(this);
 		cm.setOnClusterItemClickListener(this);
-		map.setOnInfoWindowClickListener(this);
+		cm.setOnClusterItemInfoWindowClickListener(this);
+		// map.setOnInfoWindowClickListener(this);
 		map.setOnCameraChangeListener(cm);
 
 		final Button fav = (Button) findViewById(R.id.btn);
@@ -142,7 +149,8 @@ public class MapsActivity extends Activity implements LocationListener, OnMarker
 	}
 
 	private void initFavs() {
-		favs = new HashMap<Marker, Station>();
+		// favs = new HashMap<Marker, Station>();
+		favs = new ArrayList<Station>();
 		try {
 			final FileInputStream fis = openFileInput(contract.toLowerCase(Locale.FRANCE)
 					+ "_favs.json");
@@ -152,8 +160,9 @@ public class MapsActivity extends Activity implements LocationListener, OnMarker
 				jr.beginArray();
 				while (jr.hasNext()) {
 					final Station station = gson.fromJson(jr, Station.class);
-					final String idStation = station.getNumber();
-					favs.put(markers.get(idStation), station);
+					// final String idStation = station.getNumber();
+					// favs.put(markers.get(idStation), station);
+					favs.add(station);
 				}
 				jr.endArray();
 
@@ -175,8 +184,10 @@ public class MapsActivity extends Activity implements LocationListener, OnMarker
 	@Override
 	protected void onDestroy() {
 		final Gson gson = new Gson();
-		final Collection<Station> ls = favs.values();
-		final String json = gson.toJson(ls);
+		// final Collection<Station> ls = favs.values();
+
+		// final String json = gson.toJson(ls);
+		final String json = gson.toJson(favs);
 		try {
 			// creation du fichier
 			final FileOutputStream fos = openFileOutput(contract.toLowerCase(Locale.FRANCE)
@@ -226,14 +237,14 @@ public class MapsActivity extends Activity implements LocationListener, OnMarker
 
 	}
 
-	@Override
-	public boolean onMarkerClick(final Marker marker) {
-		// recuperer les infos de la station
-		selectedMarker = marker; // je pense que c'est bien inutile
-		final Station station = stations.get(marker);
-		refresh(station);
-		return false;
-	}
+	// @Override
+	// public boolean onMarkerClick(final Marker marker) {
+	// // recuperer les infos de la station
+	// selectedMarker = marker; // je pense que c'est bien inutile
+	// final Station station = stations.get(marker);
+	// refresh(station);
+	// return false;
+	// }
 
 	private void refresh(final Station station) {
 		final StationRequest request = new StationRequest(station.getContract(),
@@ -247,7 +258,7 @@ public class MapsActivity extends Activity implements LocationListener, OnMarker
 
 		// cache toujours expiré : TODO a changer puisque les données sont valables 1 min
 		spiceManager.execute(request, null, DurationInMillis.ALWAYS_EXPIRED,
-				new StationRTIRequestListener(selectedMarker));
+				new StationRTIRequestListener());
 	}
 
 	// robospice
@@ -272,12 +283,16 @@ public class MapsActivity extends Activity implements LocationListener, OnMarker
 	/*
 	 * Faire une double map, avec comme clé les stations et comme valeur le marqueurs associé. C'est ce marqueur que l'on utilisera pour ajouter dans
 	 * ler favs
+	 * les clusters foutent en l'air l'affichage des favs
 	 */
 	@Override
-	public void onInfoWindowClick(final Marker arg0) {
+	public void onClusterItemInfoWindowClick(final Station arg0) {
+		System.out.println("prout prout");
 		// dans le cas on ou ne voit que les favs, et qu'on click sur la infowindow
-		if (favs.get(arg0) == null) {
-			favs.put(arg0, stations.get(arg0));
+		// if (favs.get(arg0) == null) {
+		if (!favs.contains(arg0)) {
+			// favs.put(arg0);
+			favs.add(arg0);
 			Toast.makeText(getApplicationContext(), "Fav added",
 					(int) DurationInMillis.ONE_SECOND * 2).show();
 		} else {
@@ -288,14 +303,58 @@ public class MapsActivity extends Activity implements LocationListener, OnMarker
 		}
 	}
 
+	// public class StationInfoWindowAdapter implements InfoWindowAdapter {
+	//
+	// @Override
+	// public View getInfoContents(final Marker marker) {
+	//
+	// return null;
+	// }
+	//
+	// @Override
+	// public View getInfoWindow(final Marker marker) {
+	// marker.setTitle(selectedItem.getName());
+	// marker.setSnippet(selectedItem.getAvailable_bikes());
+	// // TODO Auto-generated method stub
+	// return null;
+	// }
+	// }
+
+	public class StationRenderer extends DefaultClusterRenderer<Station> {
+
+		public StationRenderer() {
+			super(getApplicationContext(), map, cm);
+		}
+
+		@Override
+		protected void onBeforeClusterItemRendered(final Station item,
+				final MarkerOptions markerOptions) {
+			// TODO Auto-generated method stub
+			super.onBeforeClusterItemRendered(item, markerOptions);
+		}
+
+		@Override
+		protected void onClusterItemRendered(final Station station, final Marker marker) {
+			super.onClusterItemRendered(station, marker);
+			// pour faire le lien marker-station et pouvoir travailler sur le marker si evenenement
+			stations.put(marker, station);
+			markers.put(station.getNumber(), marker);
+			marker.setTitle(station.getName());
+			// marker.setSnippet(selectedItem.getAvailable_bikes() + "bike(s) avalaible");
+		}
+
+	}
+
 	// inner RequestListenerClass
 	private class StationRTIRequestListener implements RequestListener<StationComplete> {
 
-		private Marker marker;
+		// private Marker marker;
+		//
+		// public StationRTIRequestListener(final Marker marker) {
+		// this.marker = marker;
+		// }
+		public StationRTIRequestListener() {
 
-		public StationRTIRequestListener(final Marker marker) {
-			this.marker = marker;
-			// TODO Auto-generated constructor stub
 		}
 
 		@Override
@@ -311,8 +370,10 @@ public class MapsActivity extends Activity implements LocationListener, OnMarker
 		public void onRequestSuccess(final StationComplete station) {
 			// update your UI
 			System.out.println("request success");
+			selectedItem = station;
 			progressDial.dismiss();
-			marker = markers.get(station.getNumber());
+			final Marker marker = markers.get(station.getNumber());
+
 			final int bike = Integer.parseInt(station.getAvailable_bikes());
 			final int stand = Integer.parseInt(station.getAvailable_bike_stands());
 
@@ -357,10 +418,16 @@ public class MapsActivity extends Activity implements LocationListener, OnMarker
 			button.setText("Fav");
 		}
 		button.setTag(!(Boolean) button.getTag());
+		final com.google.maps.android.MarkerManager.Collection a = cm.getClusterMarkerCollection();
+		// for(Marker m : cm.getMarkerCollection()){
+		//
+		// }
 		for (final Marker m : stations.keySet()) {
 			m.setVisible(!m.isVisible());
 		}
-		for (final Marker m : favs.keySet()) {
+		Marker m;
+		for (final Station station : favs) {
+			m = markers.get(station.getNumber());
 			m.setVisible(!m.isVisible());
 		}
 
@@ -371,15 +438,14 @@ public class MapsActivity extends Activity implements LocationListener, OnMarker
 		// sur clic d'un cluster faire un zoom camera
 		final CameraUpdate cameraUpdate = CameraUpdateFactory.newLatLng(cluster.getPosition());
 		map.animateCamera(cameraUpdate);
-		CameraUpdateFactory.zoomIn();
+		map.animateCamera(CameraUpdateFactory.zoomIn());
 		return false;
 	}
 
 	@Override
 	public boolean onClusterItemClick(final Station item) {
-		System.out.println("SIMPLE ITEM");
 		refresh(item);
-		return true;
+		return false;
 	}
 
 }

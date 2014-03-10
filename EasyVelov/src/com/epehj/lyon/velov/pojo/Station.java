@@ -8,7 +8,7 @@ public class Station implements ClusterItem {
 	private String number;
 	private String name;
 	private String latitude, longitude;
-	private final LatLng position;
+	private LatLng position; // TODO a changer
 	// private Marker marker;
 	private String contract;
 
@@ -25,19 +25,19 @@ public class Station implements ClusterItem {
 		return number;
 	}
 
-	public String getLat() {
+	public String getLatitude() {
 		return latitude;
 	}
 
-	public void setLat(final String lat) {
+	public void setLatitude(final String lat) {
 		this.latitude = lat;
 	}
 
-	public String getLng() {
+	public String getLongitude() {
 		return longitude;
 	}
 
-	public void setLng(final String lng) {
+	public void setLongitude(final String lng) {
 		this.longitude = lng;
 	}
 
@@ -66,8 +66,26 @@ public class Station implements ClusterItem {
 		return contract;
 	}
 
+	public void compute() {
+		position = new LatLng(Double.parseDouble(latitude), Double.parseDouble(longitude));
+	}
+
+	public void setPosition(final String lat, final String lng) {
+		this.latitude = lat;
+		this.longitude = lng;
+		position = new LatLng(Double.parseDouble(latitude), Double.parseDouble(longitude));
+	}
+
+	public void setPosition(final LatLng pos) {
+		position = pos;
+	}
+
 	@Override
 	public LatLng getPosition() {
-		return new LatLng(Double.parseDouble(latitude), Double.parseDouble(longitude));
+		if (position != null) {
+			return position;
+		} else {
+			return new LatLng(Double.parseDouble(latitude), Double.parseDouble(longitude));
+		}
 	}
 }

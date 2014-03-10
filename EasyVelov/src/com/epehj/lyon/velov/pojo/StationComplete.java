@@ -2,6 +2,8 @@ package com.epehj.lyon.velov.pojo;
 
 import org.codehaus.jackson.annotate.JsonIgnoreProperties;
 
+import com.google.gson.annotations.SerializedName;
+
 //faire une classe complete :
 /**
  * toString() qui renvoie le nb de bike et stand, avec bonne orthographe
@@ -11,8 +13,8 @@ import org.codehaus.jackson.annotate.JsonIgnoreProperties;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class StationComplete extends Station {
 
-	public StationComplete(final String num, final String nom, final String lati, final String longi) {
-		super(num, nom, lati, longi);
+	public StationComplete(final String num, final String nom, final String lat, final String lng) {
+		super(num, nom, lat, lng);
 	}
 
 	private String banking;
@@ -22,6 +24,10 @@ public class StationComplete extends Station {
 	private String contract_name;
 	private String available_bikes;
 	private String last_update;
+	@SerializedName("lat")
+	private String lat;
+	@SerializedName("lng")
+	private String lng;
 
 	public String getBike_stands() {
 		return bike_stands;

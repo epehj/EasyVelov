@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -29,14 +30,18 @@ import com.epehj.lyon.velov.pojo.StationComplete;
 import com.google.android.gms.maps.CameraUpdate;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
+import com.google.android.gms.maps.GoogleMap.OnMapLoadedCallback;
+import com.google.android.gms.maps.GoogleMap.OnMyLocationButtonClickListener;
 import com.google.android.gms.maps.MapFragment;
 import com.google.android.gms.maps.model.BitmapDescriptor;
 import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.LatLngBounds;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.gson.Gson;
 import com.google.gson.stream.JsonReader;
+import com.google.maps.android.SphericalUtil;
 import com.google.maps.android.clustering.Cluster;
 import com.google.maps.android.clustering.ClusterManager;
 import com.google.maps.android.clustering.view.DefaultClusterRenderer;
@@ -47,15 +52,17 @@ import com.octo.android.robospice.persistence.exception.SpiceException;
 import com.octo.android.robospice.request.listener.RequestListener;
 
 //TODO ajouter un calque avec les stations favorites qui se rafraichissent automatiquement au lancement
-//TODO faire un zoom pour voir l'ensemble des stations fav et les rafraichir
+//TODO faire un zoom pour voir l'ensemble des stations fav et les rafraichir mais sans bloquer l'UI
+//TODO garder en mémoire l'état des markers (vert, jaune, rouge) au passage favs/all
+// TODO ne pas afficher l'infoWindow de la derniere station fav refresh
+// TODO pb dans la deserialisation du json, att position pas correctement posée
+
 /**
  * 
  * @author e_msette
  * 
  *         TODO modifier le json global pour ajouter les stations favorites
  *         TODO utiliser le padding pour afficher un autre layout et ajouter un bouton pour afficher les fav
- *         TODO creer les marqueurs des fav en parallèle mais ne pas les afficher de suite.
- *         TODO utiliser map utility libs
  */
 
 public class MapsActivity extends Activity implements LocationListener, OnClickListener,
@@ -71,15 +78,17 @@ public class MapsActivity extends Activity implements LocationListener, OnClickL
 	// contient exactement stations, mais utilise les stations comme clés plutot que les markers.
 	// utilisé pour ajouter des stations en favoris
 	// en gros ça sert uniquement a faire une liste doublement chainée, il doit y avoir plus propre
+
+	/** un marker lié a l'id d'une station */
 	private final Map<String, Marker> markers = new HashMap<String, Marker>();
 	// private Map<Marker, Station> favs = null;
+	/** la liste des stations favorites */
 	private List<Station> favs;
 
 	private ProgressDialog progressDial = null;
 
 	protected SpiceManager spiceManager = new SpiceManager(GsonSpringAndroidSpiceService.class);
 	private Marker selectedMarker;
-	private StationComplete selectedItem;
 
 	@Override
 	protected void onCreate(final Bundle SavedInstance) {
@@ -95,6 +104,11 @@ public class MapsActivity extends Activity implements LocationListener, OnClickL
 		// map.setInfoWindowAdapter(cm.getMarkerManager());
 		// cm.getMarkerCollection().setOnInfoWindowAdapter(new StationInfoWindowAdapter());
 
+		locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+		locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER,
+				(long) 1 * 60 * 1000, 10, this); // You can also use LocationManager.GPS_PROVIDER and LocationManager.PASSIVE_PROVIDER
+		final Location loc = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
+
 		final InputStream is = getResources().openRawResource(R.raw.lyon);
 		final JsonReader jr = new JsonReader(new InputStreamReader(is));
 		// final List<Station> stations = new ArrayList<Station>();
@@ -105,29 +119,32 @@ public class MapsActivity extends Activity implements LocationListener, OnClickL
 			while (jr.hasNext()) {
 				final Station s = (Station) gson.fromJson(jr, Station.class);
 				s.setContract(contract);
+				// s.compute();
 				cm.addItem(s);
 				// plutot faire un dico, Marker => station
 				// stations.put(
 				// selectedMarker = map.addMarker(new MarkerOptions().title(s.getName())
 				// .position(s.getPosition()).visible(false)), s);
-				markers.put(s.getNumber(), selectedMarker);
+				// markers.put(s.getNumber(), selectedMarker); // inutile…selectedmarker == null !!
 				// refresh(s);
 				// stations.add(s);
+				// en faisant un refresh ici, on est pas encore passé dans le onClusterItemRendered donc le lien stationId ¨<-> marker n'existe pas
+				// encore
+				// refreshNextToMe(loc, s);
+
 			}// while
 			jr.endArray();
 
 			// initFavs, on pourrait le faire dans un thread à part pour alléger l'UI
 			initFavs();
+			// stations est vide en fait ici, c'est pour ça que ça sert à rien de refresh…
+			// refreshNextToMe(loc, stations.values());
 
 		} catch (final IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 
-		locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
-		locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER,
-				(long) 1 * 60 * 1000, 10, this); // You can also use LocationManager.GPS_PROVIDER and LocationManager.PASSIVE_PROVIDER
-		final Location loc = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
 		map.animateCamera(CameraUpdateFactory.newLatLngZoom(
 				new LatLng(loc.getLatitude(), loc.getLongitude()), 15));
 
@@ -136,16 +153,42 @@ public class MapsActivity extends Activity implements LocationListener, OnClickL
 		map.setOnMarkerClickListener(cm);
 		cm.setOnClusterClickListener(this);
 		cm.setOnClusterItemClickListener(this);
+		map.setOnInfoWindowClickListener(cm);
 		cm.setOnClusterItemInfoWindowClickListener(this);
-		// map.setOnInfoWindowClickListener(this);
 		map.setOnCameraChangeListener(cm);
 
 		final Button fav = (Button) findViewById(R.id.btn);
 		fav.setTag(true);
 		fav.setOnClickListener(this);
 
+		map.setOnMapLoadedCallback(new OnMapLoadedCallback() {
+
+			@Override
+			public void onMapLoaded() {
+				refreshNextToMe(loc, stations.values());
+
+			}
+		});
+		map.setOnMyLocationButtonClickListener(new OnMyLocationButtonClickListener() {
+
+			@Override
+			public boolean onMyLocationButtonClick() {
+				refreshNextToMe(loc, stations.values());
+				return false;
+			}
+		});
 		map.setPadding(0, 0, 30, 0);
 
+	}
+
+	private void refreshNextToMe(final Location loc, final Collection<Station> k) {
+		System.out.println("Refreshing all");
+		System.out.println("Collection size " + k.size());
+		if (k != null) {
+			for (final Station s : k) {
+				refreshNextToMe(loc, s);
+			}
+		}
 	}
 
 	private void initFavs() {
@@ -179,33 +222,13 @@ public class MapsActivity extends Activity implements LocationListener, OnClickL
 
 	}
 
-	// sur quit de l'app, sauvegarde en json des favs
-	// unfav depuis affichage des favs uniquement = NPE
-	@Override
-	protected void onDestroy() {
-		final Gson gson = new Gson();
-		// final Collection<Station> ls = favs.values();
-
-		// final String json = gson.toJson(ls);
-		final String json = gson.toJson(favs);
-		try {
-			// creation du fichier
-			final FileOutputStream fos = openFileOutput(contract.toLowerCase(Locale.FRANCE)
-					+ "_favs.json", MODE_PRIVATE);
-			try {
-				fos.write(json.getBytes());
-			} finally {
-				fos.close();
-			}
-		} catch (final FileNotFoundException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} catch (final IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+	private void refreshNextToMe(final Location loc, final Station s) {
+		final Double distance = SphericalUtil.computeDistanceBetween(new LatLng(loc.getLatitude(),
+				loc.getLongitude()), s.getPosition());
+		if (distance < 1000) {
+			System.out.println("NEXT TO ME : " + s.getName());
+			refresh(s);
 		}
-
-		super.onDestroy();
 	}
 
 	@Override
@@ -247,8 +270,9 @@ public class MapsActivity extends Activity implements LocationListener, OnClickL
 	// }
 
 	private void refresh(final Station station) {
+		// je peux peut etre passer direct la station en param
 		final StationRequest request = new StationRequest(station.getContract(),
-				station.getNumber());
+				station.getNumber(), station.getPosition());
 
 		setProgressBarIndeterminate(false);
 		setProgressBarVisibility(true);
@@ -256,8 +280,9 @@ public class MapsActivity extends Activity implements LocationListener, OnClickL
 		progressDial.setProgressStyle(ProgressDialog.STYLE_SPINNER);
 		progressDial.show();
 
+		final String cache = request.createCacheKey();
 		// cache toujours expiré : TODO a changer puisque les données sont valables 1 min
-		spiceManager.execute(request, null, DurationInMillis.ALWAYS_EXPIRED,
+		spiceManager.execute(request, cache, DurationInMillis.ONE_MINUTE,
 				new StationRTIRequestListener());
 	}
 
@@ -266,12 +291,38 @@ public class MapsActivity extends Activity implements LocationListener, OnClickL
 	@Override
 	protected void onStart() {
 		spiceManager.start(this);
+		final Location loc = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
+		refreshNextToMe(loc, stations.values());
 		super.onStart();
 	}
 
+	/**
+	 * serialization des favs
+	 */
 	@Override
 	protected void onStop() {
 		spiceManager.shouldStop();
+		final Gson gson = new Gson();
+		// final Collection<Station> ls = favs.values();
+
+		// final String json = gson.toJson(ls);
+		final String json = gson.toJson(favs);
+		try {
+			// creation du fichier
+			final FileOutputStream fos = openFileOutput(contract.toLowerCase(Locale.FRANCE)
+					+ "_favs.json", MODE_PRIVATE);
+			try {
+				fos.write(json.getBytes());
+			} finally {
+				fos.close();
+			}
+		} catch (final FileNotFoundException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (final IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 		super.onStop();
 	}
 
@@ -287,9 +338,9 @@ public class MapsActivity extends Activity implements LocationListener, OnClickL
 	 */
 	@Override
 	public void onClusterItemInfoWindowClick(final Station arg0) {
-		System.out.println("prout prout");
 		// dans le cas on ou ne voit que les favs, et qu'on click sur la infowindow
 		// if (favs.get(arg0) == null) {
+		// favs enregistrés,station présente mais non reconnue (ref de station !=, mais id identique…)
 		if (!favs.contains(arg0)) {
 			// favs.put(arg0);
 			favs.add(arg0);
@@ -331,6 +382,7 @@ public class MapsActivity extends Activity implements LocationListener, OnClickL
 				final MarkerOptions markerOptions) {
 			// TODO Auto-generated method stub
 			super.onBeforeClusterItemRendered(item, markerOptions);
+
 		}
 
 		@Override
@@ -353,9 +405,6 @@ public class MapsActivity extends Activity implements LocationListener, OnClickL
 		// public StationRTIRequestListener(final Marker marker) {
 		// this.marker = marker;
 		// }
-		public StationRTIRequestListener() {
-
-		}
 
 		@Override
 		public void onRequestFailure(final SpiceException e) {
@@ -370,7 +419,6 @@ public class MapsActivity extends Activity implements LocationListener, OnClickL
 		public void onRequestSuccess(final StationComplete station) {
 			// update your UI
 			System.out.println("request success");
-			selectedItem = station;
 			progressDial.dismiss();
 			final Marker marker = markers.get(station.getNumber());
 
@@ -402,34 +450,108 @@ public class MapsActivity extends Activity implements LocationListener, OnClickL
 			}
 			marker.setIcon(desc);
 
-			marker.setSnippet(bikes.toString() + stands.toString());
+			final Location loc = locationManager
+					.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
+			final double dist = SphericalUtil.computeDistanceBetween(new LatLng(loc.getLatitude(),
+					loc.getLongitude()), station.getPosition());
+			marker.setSnippet(bikes.toString() + stands.toString() + " @ " + dist + " meters");
 			marker.hideInfoWindow();
 			marker.showInfoWindow();
 			marker.setVisible(true);
 		}
 	}
 
+	/**
+	 * si button.getTag() == true alors affiche tous les markers
+	 * TODO cacher les clusters quand on affiche les favoris !
+	 */
 	@Override
 	public void onClick(final View arg0) {
 		final Button button = (Button) findViewById(R.id.btn);
 		if ((Boolean) button.getTag()) {
 			button.setText("All");
+			// je suis sur qu'on peut faire autrement que boucler sur toutes les stations
+			// ne pas afficher les clusters quand affichage des favoris
+			/*
+			 * probleme avec la vue fav et les clusters
+			 * si on est en train de regarder les favs et que l'on dezoom pour voir les clusters, et que l'on rezoom, on perds l'affichage des favs et
+			 * on repasse en mode on voit toutes les stations
+			 */
+
+			if (favs.size() > 0) {
+				cm.clearItems();
+				// for (final Marker m : cm.getClusterMarkerCollection().getMarkers()) {
+				// m.setVisible(false);
+				// }
+				// on efface toutes les stations
+				// for (final Marker m : stations.keySet()) {
+				// m.setVisible(false);
+				// }
+				// on affiche explicitement les stations qui sont en favs
+				// for (final Station s : favs) {
+				cm.addItems(favs);
+				// final Marker m = markers.get(s.getNumber());
+				// m.setVisible(true);
+				// }
+
+				// for (final String stationNumber : markers.keySet()) {
+				// final Marker m = markers.get(stationNumber);
+				// if (m != null) {
+				// final Station s = stations.get(m);
+				// if (s != null) {
+				// if (favs.contains(s)) {
+				// m.setVisible(true);
+				// } else {
+				// m.setVisible(false);
+				// }
+				// } else {
+				// // vide = station clusterisée je pense
+				// System.out.println("vide");
+				// }
+				// }
+				// }
+				// creer un zoom pour ne voir toutes les stations favs
+				final LatLngBounds.Builder builder = LatLngBounds.builder();
+				for (final Station s : favs) {
+					builder.include(s.getPosition());
+					refresh(s);
+				}
+				final CameraUpdate cu = CameraUpdateFactory.newLatLngBounds(builder.build(), 10);
+				map.animateCamera(cu);
+
+			} else {
+				Toast.makeText(this, "No favs", (int) DurationInMillis.ONE_SECOND * 3).show();
+			}
 		} else {
+			cm.clearItems();
+			cm.addItems(stations.values());
+			// for (final Marker m : cm.getClusterMarkerCollection().getMarkers()) {
+			// m.setVisible(true);
+			// }
+			// for (final Marker m : stations.keySet()) {
+			// m.setVisible(true);
+			// }
 			button.setText("Fav");
+
 		}
-		button.setTag(!(Boolean) button.getTag());
-		final com.google.maps.android.MarkerManager.Collection a = cm.getClusterMarkerCollection();
-		// for(Marker m : cm.getMarkerCollection()){
-		//
+
+		// for (final Marker m : stations.keySet()) {
+		// if (!favs.contains(markers.get(m))) {
+		// m.setVisible(false);
 		// }
-		for (final Marker m : stations.keySet()) {
-			m.setVisible(!m.isVisible());
-		}
-		Marker m;
-		for (final Station station : favs) {
-			m = markers.get(station.getNumber());
-			m.setVisible(!m.isVisible());
-		}
+		// }
+
+		button.setTag(!(Boolean) button.getTag());
+		// ne plus voir les clusters de markers quand on affiche les favoris
+		// for (final Marker m : stations.keySet()) {
+		// m.setVisible(!m.isVisible());
+		// }
+		// Marker m;
+		// for (final Station station : favs) {
+		// m = markers.get(station.getNumber());
+		// m.setVisible(!m.isVisible());
+		// }
+		cm.cluster();
 
 	}
 

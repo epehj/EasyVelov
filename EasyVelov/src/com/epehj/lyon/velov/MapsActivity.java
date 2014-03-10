@@ -151,11 +151,11 @@ public class MapsActivity extends Activity implements LocationListener, OnClickL
 		// Listeners
 		// map.setOnMarkerClickListener(this);
 		map.setOnMarkerClickListener(cm);
+		map.setOnInfoWindowClickListener(cm);
+		map.setOnCameraChangeListener(cm);
 		cm.setOnClusterClickListener(this);
 		cm.setOnClusterItemClickListener(this);
-		map.setOnInfoWindowClickListener(cm);
 		cm.setOnClusterItemInfoWindowClickListener(this);
-		map.setOnCameraChangeListener(cm);
 
 		final Button fav = (Button) findViewById(R.id.btn);
 		fav.setTag(true);
@@ -557,11 +557,14 @@ public class MapsActivity extends Activity implements LocationListener, OnClickL
 
 	@Override
 	public boolean onClusterClick(final Cluster<Station> cluster) {
+		System.out.println("CLUSTER CLICK");
 		// sur clic d'un cluster faire un zoom camera
-		final CameraUpdate cameraUpdate = CameraUpdateFactory.newLatLng(cluster.getPosition());
+		// final CameraUpdate cameraUpdate = CameraUpdateFactory.newLatLng(cluster.getPosition());
+		final CameraUpdate cameraUpdate = CameraUpdateFactory.newLatLngZoom(cluster.getPosition(),
+				map.getCameraPosition().zoom + 1);
+		// map.animateCamera(CameraUpdateFactory.zoomIn());
 		map.animateCamera(cameraUpdate);
-		map.animateCamera(CameraUpdateFactory.zoomIn());
-		return false;
+		return true;
 	}
 
 	@Override

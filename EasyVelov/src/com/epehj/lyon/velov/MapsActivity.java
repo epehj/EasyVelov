@@ -20,9 +20,12 @@ import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
 import android.os.Bundle;
+<<<<<<< HEAD
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.widget.Button;
+=======
+>>>>>>> 11e4ea5e96f85a3732e6eb046733d6a5252be30c
 import android.widget.Toast;
 
 import com.epehj.lyon.velov.pojo.Station;
@@ -30,8 +33,13 @@ import com.epehj.lyon.velov.pojo.StationComplete;
 import com.google.android.gms.maps.CameraUpdate;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
+<<<<<<< HEAD
 import com.google.android.gms.maps.GoogleMap.OnMapLoadedCallback;
 import com.google.android.gms.maps.GoogleMap.OnMyLocationButtonClickListener;
+=======
+import com.google.android.gms.maps.GoogleMap.OnInfoWindowClickListener;
+import com.google.android.gms.maps.GoogleMap.OnMarkerClickListener;
+>>>>>>> 11e4ea5e96f85a3732e6eb046733d6a5252be30c
 import com.google.android.gms.maps.MapFragment;
 import com.google.android.gms.maps.model.BitmapDescriptor;
 import com.google.android.gms.maps.model.BitmapDescriptorFactory;
@@ -52,29 +60,43 @@ import com.octo.android.robospice.persistence.exception.SpiceException;
 import com.octo.android.robospice.request.listener.RequestListener;
 
 //TODO ajouter un calque avec les stations favorites qui se rafraichissent automatiquement au lancement
+<<<<<<< HEAD
 //TODO faire un zoom pour voir l'ensemble des stations fav et les rafraichir mais sans bloquer l'UI
 //TODO garder en mémoire l'état des markers (vert, jaune, rouge) au passage favs/all
 // TODO ne pas afficher l'infoWindow de la derniere station fav refresh
 // TODO pb dans la deserialisation du json, att position pas correctement posée
 
+=======
+//TODO faire un zoom pour voir l'ensemble des stations fav et les rafraichir
+>>>>>>> 11e4ea5e96f85a3732e6eb046733d6a5252be30c
 /**
  * 
  * @author e_msette
  * 
  *         TODO modifier le json global pour ajouter les stations favorites
  *         TODO utiliser le padding pour afficher un autre layout et ajouter un bouton pour afficher les fav
+<<<<<<< HEAD
  */
 
 public class MapsActivity extends Activity implements LocationListener, OnClickListener,
 		ClusterManager.OnClusterClickListener<Station>,
 		ClusterManager.OnClusterItemClickListener<Station>,
 		ClusterManager.OnClusterItemInfoWindowClickListener<Station> {
+=======
+ *         TODO creer les marqueurs des fav en parallèle mais ne pas les afficher de suite.
+ *         TODO utiliser map utility libs
+ */
+
+public class MapsActivity extends Activity implements LocationListener, OnMarkerClickListener,
+		OnInfoWindowClickListener {
+>>>>>>> 11e4ea5e96f85a3732e6eb046733d6a5252be30c
 	private LocationManager locationManager;
 	private GoogleMap map;
 	private ClusterManager<Station> cm;
 
 	private final String contract = "Lyon"; // TODO : a rendre modulaire
 	private final Map<Marker, Station> stations = new HashMap<Marker, Station>();
+<<<<<<< HEAD
 	// contient exactement stations, mais utilise les stations comme clés plutot que les markers.
 	// utilisé pour ajouter des stations en favoris
 	// en gros ça sert uniquement a faire une liste doublement chainée, il doit y avoir plus propre
@@ -84,6 +106,9 @@ public class MapsActivity extends Activity implements LocationListener, OnClickL
 	// private Map<Marker, Station> favs = null;
 	/** la liste des stations favorites */
 	private List<Station> favs;
+=======
+	private final Map<Marker, Station> favs = new HashMap<Marker, Station>();
+>>>>>>> 11e4ea5e96f85a3732e6eb046733d6a5252be30c
 
 	private ProgressDialog progressDial = null;
 
@@ -122,12 +147,23 @@ public class MapsActivity extends Activity implements LocationListener, OnClickL
 				// s.compute();
 				cm.addItem(s);
 				// plutot faire un dico, Marker => station
+<<<<<<< HEAD
 				// stations.put(
 				// selectedMarker = map.addMarker(new MarkerOptions().title(s.getName())
 				// .position(s.getPosition()).visible(false)), s);
 				// markers.put(s.getNumber(), selectedMarker); // inutile…selectedmarker == null !!
+=======
+				stations.put(
+						selectedMarker = map.addMarker(new MarkerOptions().title(s.getName())
+								.position(
+										new LatLng(Float.parseFloat(s.getLat()), Float.parseFloat(s
+												.getLng())))), s);
+				// initFavs();
+
+>>>>>>> 11e4ea5e96f85a3732e6eb046733d6a5252be30c
 				// refresh(s);
 				// stations.add(s);
+<<<<<<< HEAD
 				// en faisant un refresh ici, on est pas encore passé dans le onClusterItemRendered donc le lien stationId ¨<-> marker n'existe pas
 				// encore
 				// refreshNextToMe(loc, s);
@@ -140,15 +176,28 @@ public class MapsActivity extends Activity implements LocationListener, OnClickL
 			// stations est vide en fait ici, c'est pour ça que ça sert à rien de refresh…
 			// refreshNextToMe(loc, stations.values());
 
+=======
+			}
+			jr.endArray();
+
+>>>>>>> 11e4ea5e96f85a3732e6eb046733d6a5252be30c
 		} catch (final IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 
+<<<<<<< HEAD
+=======
+		locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+		locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER,
+				(long) 1 * 60 * 1000, 10, this); // You can also use LocationManager.GPS_PROVIDER and LocationManager.PASSIVE_PROVIDER
+		final Location loc = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
+>>>>>>> 11e4ea5e96f85a3732e6eb046733d6a5252be30c
 		map.animateCamera(CameraUpdateFactory.newLatLngZoom(
 				new LatLng(loc.getLatitude(), loc.getLongitude()), 15));
 
 		// Listeners
+<<<<<<< HEAD
 		// map.setOnMarkerClickListener(this);
 		map.setOnMarkerClickListener(cm);
 		map.setOnInfoWindowClickListener(cm);
@@ -177,10 +226,15 @@ public class MapsActivity extends Activity implements LocationListener, OnClickL
 				return false;
 			}
 		});
+=======
+		map.setOnMarkerClickListener(this);
+		map.setOnInfoWindowClickListener(this);
+>>>>>>> 11e4ea5e96f85a3732e6eb046733d6a5252be30c
 		map.setPadding(0, 0, 30, 0);
 
 	}
 
+<<<<<<< HEAD
 	private void refreshNextToMe(final Location loc, final Collection<Station> k) {
 		System.out.println("Refreshing all");
 		System.out.println("Collection size " + k.size());
@@ -229,6 +283,13 @@ public class MapsActivity extends Activity implements LocationListener, OnClickL
 			System.out.println("NEXT TO ME : " + s.getName());
 			refresh(s);
 		}
+=======
+	// sur quit de l'app, sauvegarde en json des favs
+	@Override
+	protected void onDestroy() {
+		// TODO Auto-generated method stub
+		super.onDestroy();
+>>>>>>> 11e4ea5e96f85a3732e6eb046733d6a5252be30c
 	}
 
 	@Override
@@ -272,7 +333,11 @@ public class MapsActivity extends Activity implements LocationListener, OnClickL
 	private void refresh(final Station station) {
 		// je peux peut etre passer direct la station en param
 		final StationRequest request = new StationRequest(station.getContract(),
+<<<<<<< HEAD
 				station.getNumber(), station.getPosition());
+=======
+				station.getNumber());
+>>>>>>> 11e4ea5e96f85a3732e6eb046733d6a5252be30c
 
 		setProgressBarIndeterminate(false);
 		setProgressBarVisibility(true);
@@ -327,6 +392,7 @@ public class MapsActivity extends Activity implements LocationListener, OnClickL
 	}
 
 	// sur clic, on place en fav
+<<<<<<< HEAD
 	// les stations peuvent être en double, je pense que c'est lié aux markers pendant qu'on fav
 	// on vient de clicker sur une station, alors qu'on voyait tous les markers
 	// -> il faut ajouter le marker de stations et la station, et pas un nouveau marker
@@ -344,16 +410,26 @@ public class MapsActivity extends Activity implements LocationListener, OnClickL
 		if (!favs.contains(arg0)) {
 			// favs.put(arg0);
 			favs.add(arg0);
+=======
+	@Override
+	public void onInfoWindowClick(final Marker arg0) {
+		if (favs.get(arg0) == null) {
+			favs.put(arg0, stations.get(arg0));
+>>>>>>> 11e4ea5e96f85a3732e6eb046733d6a5252be30c
 			Toast.makeText(getApplicationContext(), "Fav added",
 					(int) DurationInMillis.ONE_SECOND * 2).show();
 		} else {
 			favs.remove(arg0);
+<<<<<<< HEAD
 			// arg0.setVisible(false);
+=======
+>>>>>>> 11e4ea5e96f85a3732e6eb046733d6a5252be30c
 			Toast.makeText(getApplicationContext(), "Fav removed",
 					(int) DurationInMillis.ONE_SECOND * 2).show();
 		}
 	}
 
+<<<<<<< HEAD
 	// public class StationInfoWindowAdapter implements InfoWindowAdapter {
 	//
 	// @Override
@@ -376,6 +452,10 @@ public class MapsActivity extends Activity implements LocationListener, OnClickL
 		public StationRenderer() {
 			super(getApplicationContext(), map, cm);
 		}
+=======
+	// inner RequestListenerClass
+	private class StationRTIRequestListener implements RequestListener<StationComplete> {
+>>>>>>> 11e4ea5e96f85a3732e6eb046733d6a5252be30c
 
 		@Override
 		protected void onBeforeClusterItemRendered(final Station item,

@@ -31,10 +31,13 @@ import com.google.android.gms.maps.CameraUpdate;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.GoogleMap.OnMapLoadedCallback;
+import com.google.android.gms.maps.GoogleMap.OnMapLongClickListener;
+import com.google.android.gms.maps.GoogleMap.OnMarkerDragListener;
 import com.google.android.gms.maps.GoogleMap.OnMyLocationButtonClickListener;
 import com.google.android.gms.maps.MapFragment;
 import com.google.android.gms.maps.model.BitmapDescriptor;
 import com.google.android.gms.maps.model.BitmapDescriptorFactory;
+import com.google.android.gms.maps.model.CircleOptions;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.LatLngBounds;
 import com.google.android.gms.maps.model.Marker;
@@ -66,9 +69,9 @@ import com.octo.android.robospice.request.listener.RequestListener;
  */
 
 public class MapsActivity extends Activity implements LocationListener, OnClickListener,
-		ClusterManager.OnClusterClickListener<Station>,
+		OnMapLongClickListener, ClusterManager.OnClusterClickListener<Station>,
 		ClusterManager.OnClusterItemClickListener<Station>,
-		ClusterManager.OnClusterItemInfoWindowClickListener<Station> {
+		ClusterManager.OnClusterItemInfoWindowClickListener<Station>, OnMarkerDragListener {
 	private LocationManager locationManager;
 	private GoogleMap map;
 	private ClusterManager<Station> cm;
@@ -88,7 +91,9 @@ public class MapsActivity extends Activity implements LocationListener, OnClickL
 	private ProgressDialog progressDial = null;
 
 	protected SpiceManager spiceManager = new SpiceManager(GsonSpringAndroidSpiceService.class);
-	private Marker selectedMarker;
+	private Marker radiusMarker;
+
+	// private Marker selectedMarker;
 
 	@Override
 	protected void onCreate(final Bundle SavedInstance) {
@@ -150,9 +155,12 @@ public class MapsActivity extends Activity implements LocationListener, OnClickL
 
 		// Listeners
 		// map.setOnMarkerClickListener(this);
+		map.setOnMarkerDragListener(this);
+
 		map.setOnMarkerClickListener(cm);
 		map.setOnInfoWindowClickListener(cm);
 		map.setOnCameraChangeListener(cm);
+		map.setOnMapLongClickListener(this);
 		cm.setOnClusterClickListener(this);
 		cm.setOnClusterItemClickListener(this);
 		cm.setOnClusterItemInfoWindowClickListener(this);
@@ -161,11 +169,12 @@ public class MapsActivity extends Activity implements LocationListener, OnClickL
 		fav.setTag(true);
 		fav.setOnClickListener(this);
 
+		// auto refresh next to me station when map is fully loaded
 		map.setOnMapLoadedCallback(new OnMapLoadedCallback() {
 
 			@Override
 			public void onMapLoaded() {
-				refreshNextToMe(loc, stations.values());
+				refreshNextToMe(loc, stations.values(), true);
 
 			}
 		});
@@ -173,7 +182,7 @@ public class MapsActivity extends Activity implements LocationListener, OnClickL
 
 			@Override
 			public boolean onMyLocationButtonClick() {
-				refreshNextToMe(loc, stations.values());
+				refreshNextToMe(loc, stations.values(), false);
 				return false;
 			}
 		});
@@ -181,12 +190,13 @@ public class MapsActivity extends Activity implements LocationListener, OnClickL
 
 	}
 
-	private void refreshNextToMe(final Location loc, final Collection<Station> k) {
+	private void refreshNextToMe(final Location loc, final Collection<Station> k,
+			final boolean refreshFromStart) {
 		System.out.println("Refreshing all");
 		System.out.println("Collection size " + k.size());
 		if (k != null) {
 			for (final Station s : k) {
-				refreshNextToMe(loc, s);
+				refreshNextToMe(loc, s, refreshFromStart);
 			}
 		}
 	}
@@ -222,12 +232,12 @@ public class MapsActivity extends Activity implements LocationListener, OnClickL
 
 	}
 
-	private void refreshNextToMe(final Location loc, final Station s) {
+	private void refreshNextToMe(final Location loc, final Station s, final boolean refreshFromStart) {
 		final Double distance = SphericalUtil.computeDistanceBetween(new LatLng(loc.getLatitude(),
 				loc.getLongitude()), s.getPosition());
 		if (distance < 1000) {
 			System.out.println("NEXT TO ME : " + s.getName());
-			refresh(s);
+			refresh(s, refreshFromStart);
 		}
 	}
 
@@ -268,8 +278,14 @@ public class MapsActivity extends Activity implements LocationListener, OnClickL
 	// refresh(station);
 	// return false;
 	// }
-
-	private void refresh(final Station station) {
+	/**
+	 * 
+	 * @param station
+	 *            station to be updated
+	 * @param fr
+	 *            show or not the infowindow when refreshed
+	 */
+	private void refresh(final Station station, final boolean fr) {
 		// je peux peut etre passer direct la station en param
 		final StationRequest request = new StationRequest(station.getContract(),
 				station.getNumber(), station.getPosition());
@@ -283,7 +299,7 @@ public class MapsActivity extends Activity implements LocationListener, OnClickL
 		final String cache = request.createCacheKey();
 		// cache toujours expiré : TODO a changer puisque les données sont valables 1 min
 		spiceManager.execute(request, cache, DurationInMillis.ONE_MINUTE,
-				new StationRTIRequestListener());
+				new StationRTIRequestListener(fr));
 	}
 
 	// robospice
@@ -292,7 +308,7 @@ public class MapsActivity extends Activity implements LocationListener, OnClickL
 	protected void onStart() {
 		spiceManager.start(this);
 		final Location loc = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
-		refreshNextToMe(loc, stations.values());
+		refreshNextToMe(loc, stations.values(), true);
 		super.onStart();
 	}
 
@@ -400,11 +416,13 @@ public class MapsActivity extends Activity implements LocationListener, OnClickL
 	// inner RequestListenerClass
 	private class StationRTIRequestListener implements RequestListener<StationComplete> {
 
+		private final boolean fromRefreshOnStart;
+
 		// private Marker marker;
 		//
-		// public StationRTIRequestListener(final Marker marker) {
-		// this.marker = marker;
-		// }
+		public StationRTIRequestListener(final boolean fromRefresh) {
+			this.fromRefreshOnStart = fromRefresh;
+		}
 
 		@Override
 		public void onRequestFailure(final SpiceException e) {
@@ -456,7 +474,9 @@ public class MapsActivity extends Activity implements LocationListener, OnClickL
 					loc.getLongitude()), station.getPosition());
 			marker.setSnippet(bikes.toString() + stands.toString() + " @ " + dist + " meters");
 			marker.hideInfoWindow();
-			marker.showInfoWindow();
+			if (!fromRefreshOnStart) {
+				marker.showInfoWindow();
+			}
 			marker.setVisible(true);
 		}
 	}
@@ -514,9 +534,9 @@ public class MapsActivity extends Activity implements LocationListener, OnClickL
 				final LatLngBounds.Builder builder = LatLngBounds.builder();
 				for (final Station s : favs) {
 					builder.include(s.getPosition());
-					refresh(s);
+					refresh(s, false);
 				}
-				final CameraUpdate cu = CameraUpdateFactory.newLatLngBounds(builder.build(), 10);
+				final CameraUpdate cu = CameraUpdateFactory.newLatLngBounds(builder.build(), 30);
 				map.animateCamera(cu);
 
 			} else {
@@ -557,7 +577,6 @@ public class MapsActivity extends Activity implements LocationListener, OnClickL
 
 	@Override
 	public boolean onClusterClick(final Cluster<Station> cluster) {
-		System.out.println("CLUSTER CLICK");
 		// sur clic d'un cluster faire un zoom camera
 		// final CameraUpdate cameraUpdate = CameraUpdateFactory.newLatLng(cluster.getPosition());
 		final CameraUpdate cameraUpdate = CameraUpdateFactory.newLatLngZoom(cluster.getPosition(),
@@ -569,8 +588,72 @@ public class MapsActivity extends Activity implements LocationListener, OnClickL
 
 	@Override
 	public boolean onClusterItemClick(final Station item) {
-		refresh(item);
+		refresh(item, false);
 		return false;
+	}
+
+	// TODO recuperer une position pour dessiner un cercle qui prenne une bonne partie de l'écran, et pas forcément 1km
+	// (car non adapté si zoom elevé…)
+	@Override
+	public void onMapLongClick(final LatLng clicPosition) {
+
+		// centre du cercle, draggable pour définir le rayon du refresh
+		if (radiusMarker == null) {
+			radiusMarker = map.addMarker(new MarkerOptions().position(clicPosition).visible(true)
+					.draggable(true));
+			// create spherical view and refresh all station within
+			// final CircleOptions co = new CircleOptions().center(clicPosition).radius(1000); // TODO a modifier
+			// final Circle c = map.addCircle(co);
+		} else {
+			// clic juste à coté du marker, l'user s'est foiré
+			if (Math.abs(clicPosition.latitude - radiusMarker.getPosition().latitude) < 0.05
+					&& Math.abs(clicPosition.longitude - radiusMarker.getPosition().longitude) < 0.05) {
+				System.out.println("clic juste à coté du marker");
+			}
+			// complètement ailleurs, on replace le marker
+			else {
+				radiusMarker.setPosition(clicPosition);
+			}
+		}
+		radiusMarker.setPosition(clicPosition);
+
+		// final LatLngBounds.Builder builder = LatLngBounds.builder();
+		// for (final Station s : stations.values()) {
+		// if (SphericalUtil.computeDistanceBetween(clicPosition, s.getPosition()) < 1000) {
+		// refresh(s, false);
+		// }
+		// builder.include(s.getPosition());
+		// }
+	}
+
+	@Override
+	public void onMarkerDrag(final Marker marker) {
+		// TODO Auto-generated method stub
+		// on dessine le cercle pendant qu'on drag le marker
+		System.out.println("Marker being dragged");
+		final LatLng position = marker.getPosition();
+
+		map.addCircle(new CircleOptions().center(radiusMarker.getPosition()).radius(
+				SphericalUtil.computeDistanceBetween(radiusMarker.getPosition(), position)));
+
+	}
+
+	@Override
+	public void onMarkerDragEnd(final Marker marker) {
+		System.out.println("Marker DragEnd");
+
+		// for (final Station s : stations.values()) {
+		// // if(SphericalUtil.computeDistanceBetween(s.getPosition(), position) < 1000)
+		// refresh(s, false);
+		// // TODO Auto-generated method stub
+		// }
+
+	}
+
+	@Override
+	public void onMarkerDragStart(final Marker marker) {
+		// TODO Auto-generated method stub
+		System.out.println("Marker DragStart");
 	}
 
 }

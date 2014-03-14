@@ -16,6 +16,7 @@ import java.util.Map;
 import android.app.Activity;
 import android.app.ProgressDialog;
 import android.content.Context;
+import android.graphics.Color;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
@@ -633,8 +634,9 @@ public class MapsActivity extends Activity implements LocationListener, OnClickL
 		System.out.println("Marker being dragged");
 		final LatLng position = marker.getPosition();
 
-		map.addCircle(new CircleOptions().center(radiusMarker.getPosition()).radius(
-				SphericalUtil.computeDistanceBetween(radiusMarker.getPosition(), position)));
+		map.addCircle(new CircleOptions().center(radiusMarker.getPosition())
+				.radius(SphericalUtil.computeDistanceBetween(radiusMarker.getPosition(), position))
+				.fillColor(0x40ff0000).strokeColor(Color.BLUE).strokeWidth(3f));
 
 	}
 
